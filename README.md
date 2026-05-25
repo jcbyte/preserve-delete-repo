@@ -31,3 +31,7 @@ python -m pip install git-filter-repo
 
 - The original repository URL is not affected by this process, you can safely delete the original repository after successful archival.
 - All commit history is preserved in the archive repository, GitHub contributions (green boxes) will not be lost.
+
+## Licence
+
+[Apache License 2.0](LICENSE)
