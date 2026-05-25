@@ -3,6 +3,8 @@ param(
     $MonoRepo
 )
 
+Import-Module (Join-Path $PSScriptRoot "Util")
+
 # check that git and git filter tools is installed
 
 # create temporary directory
