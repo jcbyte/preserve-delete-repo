@@ -146,7 +146,7 @@ try {
       Write-Host "✅ Pushed updates into the Archive Repository"
       Write-Host "Archive added, you may now delete " -NoNewline
       Write-Host $DeleteRepoName -NoNewline -ForegroundColor Cyan
-      Write-Host "($DeleteRepo)" -NoNewline -ForegroundColor DarkGray
+      Write-Host " ($DeleteRepo)" -NoNewline -ForegroundColor DarkGray
     }
     else {
       Write-Error "❌ Failed to push updates to the Archive Repository"
