@@ -1,6 +1,6 @@
 param(
-    [string]$DeleteRepo,
-    [string]$MonoRepo
+  [string]$DeleteRepo,
+  [string]$MonoRepo
 )
 
 Import-Module (Join-Path $PSScriptRoot "Util")
@@ -32,11 +32,11 @@ $TempDir = "C:\Users\joelc\Desktop\preserve-delete-repo\tempdir"
 
 # Clone the mono-repo of deleted repositories
 $MonoRepoDir = Join-Path $TempDir "mono"
-git clone --bare "$MonoRepo" "$MonoRepoDir"
+git clone "$MonoRepo" "$MonoRepoDir"
 
 # Clone the repository to be deleted
 $DeleteRepoDir = Join-Path $TempDir "del"
-git clone --bare "$DeleteRepo" "$DeleteRepoDir"
+git clone "$DeleteRepo" "$DeleteRepoDir"
 
 # Create the folder name for the deleted repository in the mono-repo by time and original name
 $DeleteRepoName = [System.IO.Path]::GetFileNameWithoutExtension($DeleteRepo)
@@ -46,8 +46,15 @@ $PreservedName = "$DateNow-$DeleteRepoName"
 # Modify Git history, so that all files are placed within a subfolder
 python -m git_filter_repo --source "$DeleteRepoDir" --target "$DeleteRepoDir" --to-subdirectory-filter "$PreservedName"
 
+# Merge the modified to-delete repo into the mono-repo
+git -C "$MonoRepoDir" remote add del-repo "$DeleteRepoDir"
+git -C "$MonoRepoDir" fetch del-repo
+git -C "$MonoRepoDir" merge del-repo --allow-unrelated-histories -m "Archived ""$DeleteRepoName"" repository"
+git -C "$MonoRepoDir" remote remove del-repo
 
-# merge into monorepo
+
+# git -C "$MonoRepoDir" push origin main
+
 
 # probably user confirmation, then push monorepo and delete
 
