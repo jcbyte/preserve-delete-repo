@@ -27,8 +27,7 @@ if (-not $?) {
 }
 
 # Create temporary directory to perform repository operations
-# $TempDir = New-TemporaryDirectory
-$TempDir = "C:\Users\joelc\Desktop\preserve-delete-repo\tempdir"
+$TempDir = New-TemporaryDirectory
 
 # Clone the mono-repo of deleted repositories
 $MonoRepoDir = Join-Path $TempDir "mono"
@@ -52,9 +51,13 @@ git -C "$MonoRepoDir" fetch del-repo
 git -C "$MonoRepoDir" merge del-repo --allow-unrelated-histories -m "Archived ""$DeleteRepoName"" repository"
 git -C "$MonoRepoDir" remote remove del-repo
 
+# Allow the user to confirm changes before pushing
+$Confirm = Read-Host "Are you sure you want to archive `"$DeleteRepoName`" into the mono-repo as `"$PreservedName`"? (Y/N)"
+if ($Confirm -match "^[yY](es)?$") {
+  # If the user approves, push the updated mono-repo with added archive
+  git -C "$MonoRepoDir" push
+  Write-Host "Archive added, you may now delete `"$DeleteRepoName`" ($DeleteRepo)"
+}
 
-# git -C "$MonoRepoDir" push origin main
-
-
-# probably user confirmation, then push monorepo and delete
-
+# Cleanup by removing the temporary directory
+Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
