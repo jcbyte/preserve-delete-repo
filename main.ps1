@@ -1,9 +1,54 @@
-param(
+﻿param(
+  [Parameter(Mandatory = $true)]
   [string]$DeleteRepo,
-  [string]$MonoRepo
+  [Parameter(Mandatory = $true)]
+  [string]$ArchiveRepo
 )
 
-Import-Module (Join-Path $PSScriptRoot "Util")
+# Create a new temporary directory and return its path
+function New-TemporaryDirectory {
+  $TmpDir = [System.IO.Path]::GetTempPath()
+  $Name = (New-Guid).ToString("N") # ? HIghly unlikely change of collision
+  $Path = Join-Path $TmpDir $Name
+  New-Item -ItemType Directory -Path $Path | Out-Null
+  return $Path
+}
+
+# Create a spinner which will spin until the ScriptBlock finishes executing
+function Start-Spinner {
+  param (
+    [string]$Message,
+    [scriptblock]$ScriptBlock
+  )
+    
+  # Spinner animation
+  $Spinner = @("◜", "◠", "◝", "◞", "◡", "◟")
+  
+  # Start the script block in the background
+  $Job = Start-Job -ScriptBlock $ScriptBlock
+  [Console]::CursorVisible = $false
+  
+  # Loop while the background task is running
+  $SpinnerI = 0
+  while ($Job.State -eq 'Running') {
+    Write-Host -NoNewline "`r$($Spinner[$SpinnerI]) $Message..."
+    $SpinnerI = ($SpinnerI + 1) % $Spinner.Length
+    Start-Sleep -Milliseconds 150
+  }
+
+  # Clean up the line and restore cursor
+  Write-Host -NoNewline ("`r" + (" " * ([Console]::WindowWidth - 1)) + "`r")
+  [Console]::CursorVisible = $true
+  
+  # Retrieve output, and remove job
+  $JobOutput = Receive-Job -Job $Job
+  # `COMMAND_FAILED` can be printed to flag this
+  $JobFailed = $Job.ChildJobs[0].Error -or $Job.State -eq 'Failed' -or $JobOutput -contains "COMMAND_FAILED"
+  Remove-Job -Job $Job
+
+  return -not $JobFailed
+}
+
 
 # Check that Git is installed and alliable on path
 if (-not (Get-Command "git" -ErrorAction SilentlyContinue)) {
