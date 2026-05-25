@@ -32,16 +32,20 @@ $TempDir = "C:\Users\joelc\Desktop\preserve-delete-repo\tempdir"
 
 # Clone the mono-repo of deleted repositories
 $MonoRepoDir = Join-Path $TempDir "mono"
-git clone --bare $MonoRepo $MonoRepoDir
+git clone --bare "$MonoRepo" "$MonoRepoDir"
 
 # Clone the repository to be deleted
 $DeleteRepoDir = Join-Path $TempDir "del"
-git clone --bare $DeleteRepo $DeleteRepoDir
+git clone --bare "$DeleteRepo" "$DeleteRepoDir"
 
+# Create the folder name for the deleted repository in the mono-repo by time and original name
+$DeleteRepoName = [System.IO.Path]::GetFileNameWithoutExtension($DeleteRepo)
+$DateNow = Get-Date -Format "yyyy-MM-dd"
+$PreservedName = "$DateNow-$DeleteRepoName"
 
+# Modify Git history, so that all files are placed within a subfolder
+python -m git_filter_repo --source "$DeleteRepoDir" --target "$DeleteRepoDir" --to-subdirectory-filter "$PreservedName"
 
-
-# move deleting repository to a subfolder
 
 # merge into monorepo
 
