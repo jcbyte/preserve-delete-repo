@@ -52,20 +52,20 @@ function Start-Spinner {
 
 # Check that Git is installed and alliable on path
 if (-not (Get-Command "git" -ErrorAction SilentlyContinue)) {
-  Write-Warning "Git was not found, please install it first"
+  Write-Error "❌ Git was not found, please install it first"
   exit 1
 }
 
 # Check that Python is installed and alliable on path, in order to use git-filter-repo
 if (-not (Get-Command "python" -ErrorAction SilentlyContinue)) {
-  Write-Warning "Python was not found, please install it first"
+  Write-Error "❌ Python was not found, please install it first"
   exit 1
 }
 
 # Check that git-filter-repo is installed though python
-python -m git_filter_repo --version | Out-Null
+python -m git_filter_repo --version *> $null
 if (-not $?) {
-  Write-Warning "git-filter-repo was not found, please install it first"
+  Write-Error "❌ git-filter-repo was not found, please install it first"
   Write-Host "run: " -NoNewline
   Write-Host "python -m pip install git-filter-repo" -ForegroundColor Cyan
   exit 1
@@ -74,35 +74,92 @@ if (-not $?) {
 # Create temporary directory to perform repository operations
 $TempDir = New-TemporaryDirectory
 
-# Clone the mono-repo of deleted repositories
-$MonoRepoDir = Join-Path $TempDir "mono"
-git clone "$MonoRepo" "$MonoRepoDir"
+try {
+  # Clone the archive repo of deleted repositories
+  $ArchiveRepoDir = Join-Path $TempDir "arh"
+  $Success = Start-Spinner "Cloning Archive Repository" {
+    git clone "$using:ArchiveRepo" "$using:ArchiveRepoDir" *> $null
+    if (-not $?) { return "COMMAND_FAILED" }
+  }
+  if ($Success) {
+    Write-Host "✅ Cloned Archive Repository"
+  }
+  else {
+    Write-Error "❌ Failed to clone Archive Repository ($ArchiveRepo)"
+    exit 1
+  }
 
-# Clone the repository to be deleted
-$DeleteRepoDir = Join-Path $TempDir "del"
-git clone "$DeleteRepo" "$DeleteRepoDir"
+  # Clone the repository to be deleted
+  $DeleteRepoDir = Join-Path $TempDir "del"
+  $Success = Start-Spinner "Cloning To-Delete-Repository" {
+    git clone "$using:DeleteRepo" "$using:DeleteRepoDir" *> $null
+    if (-not $?) { return "COMMAND_FAILED" }
+  }
+  if ($Success) {
+    Write-Host "✅ Cloned To-Delete Repository"
+  }
+  else {
+    Write-Error "❌ Failed to clone To-Delete Repository ($DeleteRepo)"
+    exit 1
+  }
 
-# Create the folder name for the deleted repository in the mono-repo by time and original name
-$DeleteRepoName = [System.IO.Path]::GetFileNameWithoutExtension($DeleteRepo)
-$DateNow = Get-Date -Format "yyyy-MM-dd"
-$PreservedName = "$DateNow-$DeleteRepoName"
+  # Create the folder name for the deleted repository in the archive repo by time and original name
+  $DeleteRepoName = [System.IO.Path]::GetFileNameWithoutExtension($DeleteRepo)
+  $DateNow = Get-Date -Format "yyyy-MM-dd"
+  $PreservedName = "$DateNow-$DeleteRepoName"
 
-# Modify Git history, so that all files are placed within a subfolder
-python -m git_filter_repo --source "$DeleteRepoDir" --target "$DeleteRepoDir" --to-subdirectory-filter "$PreservedName"
+  $Success = Start-Spinner "Merging history into Archive Repository" {
+    # Modify Git history, so that all files are placed within a subfolder
+    python -m git_filter_repo --source "$using:DeleteRepoDir" --target "$using:DeleteRepoDir" --to-subdirectory-filter "$using:PreservedName" *> $null
+    if (-not $?) { return "COMMAND_FAILED" }
 
-# Merge the modified to-delete repo into the mono-repo
-git -C "$MonoRepoDir" remote add del-repo "$DeleteRepoDir"
-git -C "$MonoRepoDir" fetch del-repo
-git -C "$MonoRepoDir" merge del-repo --allow-unrelated-histories -m "Archived ""$DeleteRepoName"" repository"
-git -C "$MonoRepoDir" remote remove del-repo
+    # Merge the modified to-delete repo into the archive repo
+    git -C "$using:ArchiveRepoDir" remote add del-repo "$using:DeleteRepoDir" *> $null
+    git -C "$using:ArchiveRepoDir" fetch del-repo *> $null
+    git -C "$using:ArchiveRepoDir" merge del-repo --allow-unrelated-histories -m "Archived ""$using:DeleteRepoName"" repository" *> $null
+    if (-not $?) { return "COMMAND_FAILED" }
+    git -C "$using:ArchiveRepoDir" remote remove del-repo *> $null
+  }
+  if ($Success) {
+    Write-Host "✅ Merged To-Delete Repository history into the Archive Repository"
+  }
+  else {
+    Write-Error "❌ Failed to merge To-Delete Repository history"
+    exit 1
+  }
 
-# Allow the user to confirm changes before pushing
-$Confirm = Read-Host "Are you sure you want to archive `"$DeleteRepoName`" into the mono-repo as `"$PreservedName`"? (Y/N)"
-if ($Confirm -match "^[yY](es)?$") {
-  # If the user approves, push the updated mono-repo with added archive
-  git -C "$MonoRepoDir" push
-  Write-Host "Archive added, you may now delete `"$DeleteRepoName`" ($DeleteRepo)"
+  # Allow the user to confirm changes before pushing
+  Write-Host "Are you sure you want to archive " -NoNewline
+  Write-Host $DeleteRepoName -NoNewline  -ForegroundColor Cyan
+  Write-Host " into the Archive Repository as " -NoNewline
+  Write-Host $PreservedName -NoNewline -ForegroundColor Cyan
+  Write-Host "? " -NoNewline
+  Write-Host "(y/n): " -NoNewline -ForegroundColor DarkGray
+  $Confirm = Read-Host
+  if ($Confirm -match "^[yY](es)?$") {
+    # If the user approves, push the updated archive repo with added archive
+    $Success = Start-Spinner "Pushing the updated Archive Repository" {
+      git -C "$using:ArchiveRepoDir" push *> $null
+      if (-not $?) { return "COMMAND_FAILED" }
+    }
+    if ($Success) {
+      Write-Host "✅ Pushed updates into the Archive Repository"
+      Write-Host "Archive added, you may now delete " -NoNewline
+      Write-Host $DeleteRepoName -NoNewline -ForegroundColor Cyan
+      Write-Host "($DeleteRepo)" -NoNewline -ForegroundColor DarkGray
+    }
+    else {
+      Write-Error "❌ Failed to push updates to the Archive Repository"
+      exit 1
+    }
+  }
+  else {
+    Write-Host "🗑️ Cancelled Archive"
+  }
 }
+finally {
+  # This always runs, even if exit is triggered in the try
 
-# Cleanup by removing the temporary directory
-Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
+  # Cleanup by removing the temporary directory
+  Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
+}
